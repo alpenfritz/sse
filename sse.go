@@ -70,21 +70,17 @@ func (broker *Broker) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// Signal the broker that we have a new connection
 	broker.newClients <- messageChan
 
-	// Remove this client from the map of connected clients
-	// when this handler exits.
-	defer func() {
-		broker.closingClients <- messageChan
-	}()
-
 	// Listen to connection close and un-register messageChan
 	notify := rw.(http.CloseNotifier).CloseNotify()
 
+	go func() {
+		<-notify
+		broker.closingClients <- messageChan
+	}()
+
 	for {
 		select {
-		case <-notify:
-			return
 		default:
-
 			// Write to the ResponseWriter
 			// Server Sent Events compatible
 			fmt.Fprintf(rw, "data: %s\n\n", <-messageChan)
@@ -131,14 +127,14 @@ func main() {
 
 	broker := NewServer()
 
-	go func() {
-		for {
-			time.Sleep(time.Second * 2)
-			eventString := fmt.Sprintf("the time is %v", time.Now())
-			log.Println("Receiving event")
-			broker.Notifier <- []byte(eventString)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		time.Sleep(time.Second * 2)
+	// 		eventString := fmt.Sprintf("the time is %v", time.Now())
+	// 		log.Println("Receiving event")
+	// 		broker.Notifier <- []byte(eventString)
+	// 	}
+	// }()
 
 	log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:3000", broker))
 
